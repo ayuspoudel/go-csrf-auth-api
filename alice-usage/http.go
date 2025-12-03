@@ -10,7 +10,7 @@ import (
 func main() {
 	http.HandleFunc("/", helloHandler) // This handlerFunction must satisfy the HandleFunc means it must have w and r as parameters
 	fmt.Println("Listening on port 9000")
-	pipeline := alice.New(loggingMiddleware).ThenFunc(helloHandler)
+	pipeline := alice.New(loggingMiddleware, loggingMiddleware2).ThenFunc(helloHandler)
 	http.ListenAndServe(":9000", pipeline)
 }
 
@@ -23,6 +23,19 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	}))
 }
 
+func loggingMiddleware2(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Printf("Logging Middleware 2: Received request for %s\n", r.URL.Path)
+		next.ServeHTTP(w, r)
+	})
+}
+
 func helloHandler(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("Hello from Go Server built by Ayush"))
+	switch r.URL.Path {
+	case "/":
+		w.Write([]byte("Hello from Go Server built by Ayush"))
+	case "/ayush":
+		w.Write([]byte("Hello Ayush!"))
+	}
+
 }
