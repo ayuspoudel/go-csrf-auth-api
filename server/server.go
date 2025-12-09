@@ -3,6 +3,8 @@ package server
 import (
 	"fmt"
 	"net/http"
+
+	"github.com/ayuspoudel/go-csrf-auth-api/server/middleware"
 )
 
 func StartServer(hostName string, port string) error {
