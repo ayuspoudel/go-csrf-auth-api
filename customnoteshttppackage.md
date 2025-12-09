@@ -23,8 +23,8 @@ type Handler interface{
     ServeHTTP(ResponseWriter, *Request)
 }
 ```
-If you want anything to handle an HTTP request → it must implement ServeHTTP.
 
+If you want anything to handle an HTTP request → it must implement ServeHTTP.
 Example: 
 
 ```go
@@ -33,8 +33,8 @@ func (h MyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
     fmt.Fprintln(w, "Hello")
 }
 ```
+
 Use it with:
-
+```go
 http.ListenAndServe(":8080", MyHandler{})
-
 ```
