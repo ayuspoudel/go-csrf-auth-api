@@ -1,5 +1,7 @@
 package main
 
+import "github.com/ayuspoudel/go-csrf-auth-api/server"
+
 var host = "localhost"
 var port = "9000"
 
