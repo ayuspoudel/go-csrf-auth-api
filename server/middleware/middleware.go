@@ -3,9 +3,13 @@ package middleware
 import (
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	// We are using alice package because it creates pipeline for request - response
+	"github.com/ayuspoudel/go-csrf-auth-api/db"
+	"github.com/ayuspoudel/go-csrf-auth-api/server/myJwt"
+	"github.com/ayuspoudel/go-csrf-auth-api/server/templates"
 	"github.com/justinas/alice"
 )
 
@@ -63,6 +67,9 @@ func authHandler(next http.Handler) http.Handler {
 func logicHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/restricted":
+		csrfSecert := grabCsrfFromRequest(r)
+		templates.RenderTemplates(w, "restricted", &templates.RestrictedPage{csrfSecert, "Hello Ayush!"})
+
 	case "/login":
 		switch r.Method {
 		case "POST":
@@ -72,10 +79,38 @@ func logicHandler(w http.ResponseWriter, r *http.Request) {
 	case "/register":
 		switch r.Method {
 		case "POST":
+			r.ParseForm()
+			log.Printf(r.Form)
+			_, uuid, err := db.FetchUserByUserName(strings.Join(r.Form["username"], ""))
+			if err == nil {
+				w.WriteHeader(http.StatusUnauthorized)
+				log.Println("uuid: " + uuid + "already exists")
+			} else {
+				role := "user"
+				uuid, err := db.StoreUser(strings.Join(r.Form["username"], ""), strings.Join(r.Form["password"], ""), role)
+				if err != nil {
+					http.Error(w, http.StatusText(500), 500)
+					log.Println("uuid: " + uuid)
+				}
+				authTokenString, refreshTokenString, csrfSecret, err := myJwt.CreateNewTokens(uuid, role)
+				if err != nil {
+					http.Error(w, http.StatusText(500), 500)
+				}
+				setAuthAndRefreshCookies(&w, authTokenString, refreshTokenString)
+				w.Header().Set("X-CSRF-Token", csrfSecret)
+				w.WriteHeader(http.StatusOK)
+
+			}
 		case "GET":
+			templates.RenderTemplates(w, "register", &templates.RegisterPage{false, ""})
 		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+
 		}
 	case "/logout":
+		nullifyTokenCookies(&w, r)
+		http.Redirect(w, r, "/login", 302)
+
 	case "/deleteUser":
 	default:
 	}
@@ -111,20 +146,20 @@ func nullifyTokenCookies(w *http.ResponseWriter, r *http.Request) {
 }
 
 // On signup or login we need to set auth and refresh cookies
-func setAuthAndRefreshCookies(w http.ResponseWriter, r *http.Request, authToken, refreshToken string) {
+func setAuthAndRefreshCookies(w *http.ResponseWriter, authToken, refreshToken string) {
 	authCookie := http.Cookie{
 		Name:     "AuthToken",
 		Value:    authToken,
 		HttpOnly: true,
 	}
-	http.SetCookie(w, &authCookie)
+	http.SetCookie(*w, &authCookie)
 
 	refreshCookie := http.Cookie{
 		Name:     "RefreshToken",
 		Value:    refreshToken,
 		HttpOnly: true,
 	}
-	http.SetCookie(w, &refreshCookie)
+	http.SetCookie(*w, &refreshCookie)
 }
 
 // For each protected auth path, we need this to grab CSRF from http request and validate it
