@@ -31,7 +31,7 @@ type TokenClaims struct {
 	Csrf string `json:"csrf"`
 }
 
-const refreshTokenValidTime = time.Hour * 72
+const RefreshTokenValidTime = time.Hour * 72
 const AuthTokenValidTime = time.Minute * 15
 
 func GenerateCSRFSecret() (csrf string, err error) {
