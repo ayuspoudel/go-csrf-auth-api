@@ -52,16 +52,87 @@ func recoverHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(fn)
 }
 
+/*
+In Alice's chain, authHandler is the middleware function which authorizes if user can go to
+logic handler function or not with credentials provided.
+The first credential is always the Auth Token, which comes from Auth Cookie.
+
+STEP 1 - Auth Cookie Check
+We will first look if the request contains Auth Cookie. This is the user's first proof of
+being logged in. Browser will automatically send this cookie with every request, *only after
+a successful login*. If this is missing it means
+	- user never logged in ||
+	- user logged out already ||
+	- browser cleared cookies ||
+	- tokens expired and browser removed it ||
+	- attacker is trying to directly hit protected page
+Then, we return a 401 Unauthorized Error. Because "no user session exists at all"
+	- a missing auth token means authentication failure
+	- we should not redirect to login page, because this will tell the attacker that this
+	  endpoint exists and bring valid credentials to access it. This is called Endpoint Enumeration
+We also nullify any stale cookies as a step, because it will remove all expired cookies in
+the browser if they exist.
+Then we return from the function authHandler, because if not the logic will move to
+logic handler in alice's pipeline
+*/
+
 func authHandler(next http.Handler) http.Handler {
 	fn := func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/restricted", "/logout", "/deleteUser":
 			// Here we need to check if user is authenticated
 			// If authenticated, pass to next, else return 401 unauthorized
+			log.Println("In auth restricted section")
+			AuthCookie, authErr := r.Cookie("AuthToken")
+			if authErr == http.ErrNoCookie {
+				log.Println("Unauthorized Attempt! no auth cookie")
+				nullifyTokenCookies(&w, r)
+				http.Error(w, http.StatusText(401), 401)
+				return
+			} else if authErr != nil {
+				log.Panic("panic: %+v", authErr)
+				nullifyTokenCookies(&w, r)
+				http.Error(w, http.StatusText(500), 500)
+				return
+			}
+
+			RefreshCookie, refreshErr := r.Cookie("RefreshToken")
+			if refreshErr == http.ErrNoCookie {
+				log.Println("Unauthorized Attempt! no auth cookie")
+				nullifyTokenCookies(&w, r)
+				http.Redirect(w, r, "/login", 302)
+				return
+			} else if refreshErr != nil {
+				log.Panic("panic: %+v", refreshErr)
+				nullifyTokenCookies(&w, r)
+				http.Error(w, http.StatusText(500), 500)
+				return
+			}
+			requestCsrfToken := grabCsrfFromRequest(r)
+			log.Println(requestCsrfToken)
+
+			authTokenString, refreshTokenString, csrfSecret, err := myJwt.checkAndRefreshToken(AuthCookie.Value, RefreshCookie.Value, requestCsrfToken)
+			if err != nil {
+				if err.Error() == "Unauthorized" {
+					log.Println("Unauthorized Attempt! JWT's not valid")
+					http.Error(w, http.StatusText(401), 401)
+					return
+				} else {
+					log.Panic("panic: %+v", err)
+					http.Error(w, http.StatusText(500), 500)
+					return
+				}
+			}
+			log.Println("Successfully recreated jwts")
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			setAuthAndRefreshCookies(&w, authTokenString, refreshTokenString)
+			w.Header().Set("X-CSRF-Token", csrfSecret)
 
 		default:
 		}
+		next.ServeHttp(w, r)
 	}
+	return http.HandlerFunc(fn)
 }
 
 func logicHandler(w http.ResponseWriter, r *http.Request) {

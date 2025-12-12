@@ -25,6 +25,19 @@ type User struct {
 	Role         string
 }
 
+/*
+Here, you can see that CSRF is stored inside JWT.
+Because:
+JWT is signed
+  - JWT cannot be modified without detection
+  - Therefore the CSRF secret inside the JWT is trustworthy
+  - And it ties the CSRF token tightly to the user session
+
+This prevents:
+  - Cross-site requests
+  - Token replay
+  - Cookie theft from being enough to impersonate a user
+*/
 type TokenClaims struct {
 	jwt.StandardClaims
 	Role string `json:"role"`
