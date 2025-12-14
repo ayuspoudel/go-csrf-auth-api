@@ -74,6 +74,32 @@ We also nullify any stale cookies as a step, because it will remove all expired 
 the browser if they exist.
 Then we return from the function authHandler, because if not the logic will move to
 logic handler in alice's pipeline
+
+STEP 2 - Refresh cookie Check
+If Auth Token is present we move to this step. It checks if refresh token exists. Refresh
+token is the long lived credential that allows broswer to "renew" the user's sessions
+without having them login again and again.
+If this is missing it means
+	- user once had a session, but it can no longer be refreshed
+	- the session has expired already
+Then, we redirect to login in this case
+	- because, if refresh token has expired, but auth token is there, this means user has to
+		login to get new cookies. There is not auto-renew
+
+
+STEP 3 - CSRF Token Extraction
+Now that both AuthToken and RefreshToken are present, we must verify that the request
+originated from a real user, not from an attacker.
+For that we extract the CSRF token from cookie by extracting the X-CSRF-Token using
+grabCsrfFromRequest() function. The CSRF token can
+come from either:
+    - A hidden form field:  r.FormValue("X-CSRF-Token")
+    - A custom request header: r.Header.Get("X-CSRF-Token")
+If the CSRF token is missing or incorrect, it indicates:
+    - A Cross-Site Request Forgery attack attempt
+    - A request triggered from a different website or malicious script
+    - A forged POST/DELETE triggered without user's intention
+    - A session inconsistency where browser did not attach correct CSRF token
 */
 
 func authHandler(next http.Handler) http.Handler {
